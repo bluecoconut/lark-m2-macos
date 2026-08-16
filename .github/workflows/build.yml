@@ -1,0 +1,50 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Build app archive
+        run: make release
+
+      - name: Verify app and archive
+        run: |
+          codesign --verify --deep --strict "build/Lark M2 Status.app"
+          ditto -x -k "build/Lark-M2-Status.zip" "$RUNNER_TEMP/verify"
+          test -x "$RUNNER_TEMP/verify/Lark M2 Status.app/Contents/MacOS/LarkM2Status"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Lark-M2-Status-${{ github.sha }}
+          path: build/Lark-M2-Status.zip
+          if-no-files-found: error
+          archive: false
+
+      - name: Publish tagged GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" build/Lark-M2-Status.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" build/Lark-M2-Status.zip \
+              --verify-tag \
+              --generate-notes \
+              --title "Lark M2 Status $GITHUB_REF_NAME"
+          fi
