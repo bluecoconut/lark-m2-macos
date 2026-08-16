@@ -16,19 +16,19 @@ static NSTextField *Label(NSString *text, CGFloat size, NSFontWeight weight) {
 }
 static NSStackView *InfoRow(NSString *name, NSView *value) {
     NSTextField *nameLabel = Label(name, 12, NSFontWeightRegular); nameLabel.textColor = NSColor.secondaryLabelColor;
-    NSView *spacer = [[NSView alloc] init]; spacer.translatesAutoresizingMaskIntoConstraints = NO;
-    [spacer setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
-    NSStackView *row = [NSStackView stackViewWithViews:@[nameLabel, spacer, value]];
+    [nameLabel.widthAnchor constraintEqualToConstant:116].active = YES;
+    [value.widthAnchor constraintEqualToConstant:128].active = YES;
+    NSStackView *row = [NSStackView stackViewWithViews:@[nameLabel, value]];
     row.orientation = NSUserInterfaceLayoutOrientationHorizontal; row.alignment = NSLayoutAttributeCenterY; row.spacing = 8; row.translatesAutoresizingMaskIntoConstraints = NO;
-    [row.heightAnchor constraintEqualToConstant:24].active = YES; return row;
+    [row.heightAnchor constraintEqualToConstant:22].active = YES; return row;
 }
-static NSPopUpButton *Popup(NSArray<NSString *> *items, SEL action, id target, CGFloat width) {
-    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-    [popup addItemsWithTitles:items]; popup.controlSize = NSControlSizeSmall;
-    popup.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-    popup.target = target; popup.action = action; popup.translatesAutoresizingMaskIntoConstraints = NO;
-    [popup.widthAnchor constraintEqualToConstant:width].active = YES;
-    return popup;
+static NSSegmentedControl *Segmented(NSArray<NSString *> *items, SEL action, id target) {
+    NSSegmentedControl *control = [NSSegmentedControl segmentedControlWithLabels:items trackingMode:NSSegmentSwitchTrackingSelectOne target:target action:action];
+    control.controlSize = NSControlSizeSmall; control.segmentStyle = NSSegmentStyleRounded;
+    control.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
+    control.translatesAutoresizingMaskIntoConstraints = NO;
+    [control.heightAnchor constraintEqualToConstant:22].active = YES;
+    return control;
 }
 
 static void BuildRequest(unsigned char packet[64], unsigned char reportID,
@@ -107,7 +107,9 @@ static BOOL ProductExchange(hid_device *hid, unsigned char request[64], unsigned
     self.battery.translatesAutoresizingMaskIntoConstraints = NO;
     [self.battery.widthAnchor constraintEqualToConstant:34].active = YES;
     [self.battery.heightAnchor constraintEqualToConstant:14].active = YES;
-    [self addArrangedSubview:self.state]; [self addArrangedSubview:self.battery];
+    NSView *spacer = [[NSView alloc] init]; spacer.translatesAutoresizingMaskIntoConstraints = NO;
+    [spacer setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [self addArrangedSubview:spacer]; [self addArrangedSubview:self.state]; [self addArrangedSubview:self.battery];
     return self;
 }
 - (void)setConnected:(BOOL)connected battery:(NSInteger)batteryLevel {
@@ -141,7 +143,8 @@ static NSImage *LarkIcon(void) {
 @property NSMenu *menu;
 @property NSMenuItem *launchAtLoginItem;
 @property MicStatusView *tx1Value, *tx2Value;
-@property NSPopUpButton *gainPopup, *noisePopup, *audioModePopup;
+@property NSView *contentView;
+@property NSSegmentedControl *gainControl, *noiseControl, *audioModeControl;
 @property NSTextField *controlStatus;
 @end
 
@@ -151,22 +154,25 @@ static NSImage *LarkIcon(void) {
     self.desiredAudioMode = [[NSUserDefaults standardUserDefaults] integerForKey:kAudioModeDefaultsKey] == 1 ? 1 : 0;
     self.hidQueue = dispatch_queue_create("io.github.bluecoconut.LarkM2Status.hid", DISPATCH_QUEUE_SERIAL);
     [self buildMenu]; [self updateLaunchAtLoginItem]; [self refresh:nil];
-    self.timer = [NSTimer scheduledTimerWithTimeInterval:0.75 target:self selector:@selector(refresh:) userInfo:nil repeats:YES];
+    self.timer = [NSTimer timerWithTimeInterval:1.0 target:self selector:@selector(refresh:) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:self.timer forMode:NSRunLoopCommonModes];
 }
 - (void)buildMenu {
-    NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 188)];
+    NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 268, 122)]; self.contentView = content;
     NSStackView *root = [[NSStackView alloc] init]; root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeWidth; root.spacing = 1; root.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:root];
-    [NSLayoutConstraint activateConstraints:@[[root.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:11], [root.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-11], [root.topAnchor constraintEqualToAnchor:content.topAnchor constant:5], [root.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor constant:-5]]];
+    [NSLayoutConstraint activateConstraints:@[[root.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:8], [root.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-8], [root.topAnchor constraintEqualToAnchor:content.topAnchor constant:4], [root.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor constant:-4]]];
     self.tx1Value = [[MicStatusView alloc] init]; self.tx2Value = [[MicStatusView alloc] init];
-    self.gainPopup = Popup(@[@"0 · Quietest", @"1", @"2", @"3", @"4", @"5 · Loudest"], @selector(gainChanged:), self, 142);
-    self.noisePopup = Popup(@[@"Off", @"Weak", @"Strong"], @selector(noiseChanged:), self, 142);
-    self.audioModePopup = Popup(@[@"Mono · Compatible", @"Stereo · Mic 1 L / Mic 2 R"], @selector(audioModeChanged:), self, 174);
-    [self.audioModePopup selectItemAtIndex:self.desiredAudioMode];
-    self.controlStatus = Label(@"", 10, NSFontWeightRegular); self.controlStatus.textColor = NSColor.secondaryLabelColor;
+    self.gainControl = Segmented(@[@"0", @"1", @"2", @"3", @"4", @"5"], @selector(gainChanged:), self);
+    self.noiseControl = Segmented(@[@"Off", @"Weak", @"Strong"], @selector(noiseChanged:), self);
+    self.audioModeControl = Segmented(@[@"Mono", @"Stereo"], @selector(audioModeChanged:), self);
+    self.gainControl.toolTip = @"Receiver gain: 0 is quietest, 5 is loudest";
+    self.audioModeControl.toolTip = @"Mono duplicates the mix; Stereo routes Mic 1 left and Mic 2 right";
+    self.audioModeControl.selectedSegment = self.desiredAudioMode;
+    self.controlStatus = Label(@"", 10, NSFontWeightRegular); self.controlStatus.textColor = NSColor.secondaryLabelColor; self.controlStatus.lineBreakMode = NSLineBreakByTruncatingTail; self.controlStatus.hidden = YES;
     NSStackView *details = [NSStackView stackViewWithViews:@[
         InfoRow(@"Mic 1", self.tx1Value), InfoRow(@"Mic 2", self.tx2Value),
-        InfoRow(@"Gain", self.gainPopup), InfoRow(@"Noise cancellation", self.noisePopup),
-        InfoRow(@"USB audio", self.audioModePopup), self.controlStatus
+        InfoRow(@"Gain", self.gainControl), InfoRow(@"Noise cancellation", self.noiseControl),
+        InfoRow(@"USB audio", self.audioModeControl), self.controlStatus
     ]];
     details.orientation = NSUserInterfaceLayoutOrientationVertical; details.alignment = NSLayoutAttributeWidth; details.spacing = 1; [root addArrangedSubview:details];
     self.menu = [[NSMenu alloc] initWithTitle:@""]; NSMenuItem *contentItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""]; contentItem.view = content; [self.menu addItem:contentItem]; [self.menu addItem:NSMenuItem.separatorItem];
@@ -220,9 +226,19 @@ static NSImage *LarkIcon(void) {
 - (void)setControlStatus:(NSString *)text error:(BOOL)error {
     self.controlStatus.stringValue = text ?: @"";
     self.controlStatus.textColor = error ? NSColor.systemRedColor : NSColor.secondaryLabelColor;
+    self.controlStatus.hidden = self.controlStatus.stringValue.length == 0;
+    self.contentView.frame = NSMakeRect(0, 0, 268, self.controlStatus.hidden ? 122 : 137);
+    if (!error && self.controlStatus.stringValue.length > 0) {
+        NSString *shownText = self.controlStatus.stringValue;
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            AppDelegate *app = weakSelf;
+            if (app && [app.controlStatus.stringValue isEqualToString:shownText]) [app setControlStatus:@"" error:NO];
+        });
+    }
 }
 - (void)setControlsEnabled:(BOOL)enabled {
-    self.gainPopup.enabled = enabled; self.noisePopup.enabled = enabled; self.audioModePopup.enabled = enabled;
+    self.gainControl.enabled = enabled; self.noiseControl.enabled = enabled; self.audioModeControl.enabled = enabled;
 }
 - (void)performStandardSetting:(unsigned char)command value:(unsigned char)value successText:(NSString *)successText {
     if (self.controlInFlight) return;
@@ -238,13 +254,13 @@ static NSImage *LarkIcon(void) {
         });
     });
 }
-- (void)gainChanged:(NSPopUpButton *)sender {
-    unsigned char level = (unsigned char)sender.indexOfSelectedItem;
+- (void)gainChanged:(NSSegmentedControl *)sender {
+    unsigned char level = (unsigned char)sender.selectedSegment;
     [self performStandardSetting:0x05 value:level successText:[NSString stringWithFormat:@"Gain set to %u", level]];
 }
-- (void)noiseChanged:(NSPopUpButton *)sender {
+- (void)noiseChanged:(NSSegmentedControl *)sender {
     if (self.controlInFlight) return;
-    NSInteger selection = sender.indexOfSelectedItem;
+    NSInteger selection = sender.selectedSegment;
     self.controlInFlight = YES; [self setControlsEnabled:NO]; [self setControlStatus:@"Applying…" error:NO];
     __weak typeof(self) weakSelf = self;
     dispatch_async(self.hidQueue, ^{
@@ -266,9 +282,9 @@ static NSImage *LarkIcon(void) {
         });
     });
 }
-- (void)audioModeChanged:(NSPopUpButton *)sender {
+- (void)audioModeChanged:(NSSegmentedControl *)sender {
     if (self.controlInFlight) return;
-    NSInteger mode = sender.indexOfSelectedItem == 1 ? 1 : 0;
+    NSInteger mode = sender.selectedSegment == 1 ? 1 : 0;
     self.controlInFlight = YES; [self setControlsEnabled:NO]; [self setControlStatus:@"Changing USB routing…" error:NO];
     __weak typeof(self) weakSelf = self;
     dispatch_async(self.hidQueue, ^{
@@ -282,7 +298,7 @@ static NSImage *LarkIcon(void) {
                 [[NSUserDefaults standardUserDefaults] setInteger:mode forKey:kAudioModeDefaultsKey];
                 [mainApp setControlStatus:mode ? @"Stereo active · Mic 1 L / Mic 2 R" : @"Compatible mono active" error:NO];
             } else {
-                [mainApp.audioModePopup selectItemAtIndex:mainApp.desiredAudioMode];
+                mainApp.audioModeControl.selectedSegment = mainApp.desiredAudioMode;
                 [mainApp setControlStatus:@"USB routing change failed" error:YES];
             }
         });
@@ -297,7 +313,7 @@ static NSImage *LarkIcon(void) {
     [alert addButtonWithTitle:@"Cancel"];
     [NSApp activateIgnoringOtherApps:YES]; if ([alert runModal] != NSAlertFirstButtonReturn) return;
     if (restoreMono) {
-        self.desiredAudioMode = 0; [self.audioModePopup selectItemAtIndex:0];
+        self.desiredAudioMode = 0; self.audioModeControl.selectedSegment = 0;
         [[NSUserDefaults standardUserDefaults] setInteger:0 forKey:kAudioModeDefaultsKey];
     }
     self.controlInFlight = YES; [self setControlsEnabled:NO]; [self setControlStatus:restoreMono ? @"Restoring mono and restarting…" : @"Restarting…" error:NO];
@@ -351,9 +367,9 @@ static NSImage *LarkIcon(void) {
     if (!self.receiverPresent) { [self removeStatusItem]; return; }
     [self ensureStatusItem];
     [self.tx1Value setConnected:self.tx1Connected battery:self.tx1Battery]; [self.tx2Value setConnected:self.tx2Connected battery:self.tx2Battery];
-    if (self.gain >= 0 && self.gain <= 5 && !self.controlInFlight) [self.gainPopup selectItemAtIndex:self.gain];
-    if (self.noise >= 0 && self.noise <= 2 && !self.controlInFlight) [self.noisePopup selectItemAtIndex:self.noise];
-    if (!self.controlInFlight) [self.audioModePopup selectItemAtIndex:self.desiredAudioMode];
+    if (self.gain >= 0 && self.gain <= 5 && !self.controlInFlight) self.gainControl.selectedSegment = self.gain;
+    if (self.noise >= 0 && self.noise <= 2 && !self.controlInFlight) self.noiseControl.selectedSegment = self.noise;
+    if (!self.controlInFlight) self.audioModeControl.selectedSegment = self.desiredAudioMode;
     self.statusItem.button.image = LarkIcon(); self.statusItem.button.toolTip = [NSString stringWithFormat:@"Lark M2 · Mic 1 %@ · Mic 2 %@", self.tx1Connected ? [NSString stringWithFormat:@"%ld%%", (long)self.tx1Battery] : @"offline", self.tx2Connected ? [NSString stringWithFormat:@"%ld%%", (long)self.tx2Battery] : @"offline"];
 }
 - (void)quit:(id)sender { (void)sender; [NSApp terminate:nil]; }

@@ -27,7 +27,7 @@ Other LARK M2 receiver variants and firmware releases have not yet been tested. 
 
 ## Download
 
-This project is pre-release. Until a tested release is published, build it from source or download a successful Actions artifact.
+Download `Lark-M2-Status.zip` from the [latest GitHub Release](https://github.com/bluecoconut/lark-m2-macos/releases/latest), unzip it, and move the app to `/Applications`.
 
 The generated app is ad-hoc signed, not Developer ID signed or notarized. On first launch macOS may require you to Control-click the app, choose **Open**, and confirm. Do not bypass Gatekeeper for a build obtained anywhere other than this repository.
 
